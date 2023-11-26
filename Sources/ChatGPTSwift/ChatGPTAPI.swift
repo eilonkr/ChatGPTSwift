@@ -25,7 +25,7 @@ public class ChatGPTAPI: @unchecked Sendable {
     private let urlString = "https://api.openai.com/v1/chat/completions"
     private let apiKey: String
     private let gptEncoder = GPTEncoder()
-    public private(set) var historyList = [Message]()
+    public private(set) var historyList = [PlainMessage]()
 
     let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -46,7 +46,7 @@ public class ChatGPTAPI: @unchecked Sendable {
         ]
     }
     
-    private func systemMessage(content: String) -> Message {
+    private func systemMessage(content: String) -> PlainMessage {
         .init(role: "system", content: content)
     }
     
@@ -54,8 +54,8 @@ public class ChatGPTAPI: @unchecked Sendable {
         self.apiKey = apiKey
     }
     
-    private func generateMessages(from text: String, systemText: String) -> [Message] {
-        var messages = [systemMessage(content: systemText)] + historyList + [Message(role: "user", content: text)]
+    private func generateMessages(from text: String, systemText: String) -> [PlainMessage] {
+        var messages = [systemMessage(content: systemText)] + historyList + [PlainMessage(role: "user", content: text)]
         if gptEncoder.encode(text: messages.content).count > 4096  {
             _ = historyList.removeFirst()
             messages = generateMessages(from: text, systemText: systemText)
@@ -63,17 +63,41 @@ public class ChatGPTAPI: @unchecked Sendable {
         return messages
     }
     
-    private func jsonBody(text: String, model: String, systemText: String, temperature: Double, stream: Bool = true) throws -> Data {
+    private func generateMessages(from text: String, 
+                                  imageInput: ImageInput,
+                                  systemText: String) -> [Message] {
+        // ignore limits for now
+        let message = ImageMessage(role: "user", text: text, imageInput: imageInput)
+        let messages = [systemMessage(content: systemText)] + historyList + [message]
+        
+        return messages
+    }
+    
+    private func jsonBody(text: String, 
+                          imageInput: ImageInput? = nil,
+                          model: String,
+                          systemText: String,
+                          temperature: Double,
+                          stream: Bool = true,
+                          maxTokens: Int? = nil) throws -> Data {
+        let messages: [Message]
+        if let imageInput {
+            messages = generateMessages(from: text, imageInput: imageInput, systemText: systemText)
+        } else {
+            messages = generateMessages(from: text, systemText: systemText)
+        }
+        
         let request = Request(model: model,
-                        temperature: temperature,
-                        messages: generateMessages(from: text, systemText: systemText),
-                        stream: stream)
+                              temperature: temperature,
+                              messages: messages,
+                              stream: stream,
+                              maxTokens: maxTokens)
         return try JSONEncoder().encode(request)
     }
     
     private func appendToHistoryList(userText: String, responseText: String) {
-        self.historyList.append(Message(role: "user", content: userText))
-        self.historyList.append(Message(role: "assistant", content: responseText))
+        self.historyList.append(PlainMessage(role: "user", content: userText))
+        self.historyList.append(PlainMessage(role: "assistant", content: responseText))
     }
     
     #if os(Linux)
@@ -177,11 +201,16 @@ public class ChatGPTAPI: @unchecked Sendable {
     }
 
     public func sendMessageStream(text: String,
+                                  imageInput: ImageInput? = nil,
                                   model: String = ChatGPTAPI.Constants.defaultModel,
                                   systemText: String = ChatGPTAPI.Constants.defaultSystemText,
                                   temperature: Double = ChatGPTAPI.Constants.defaultTemperature) async throws -> AsyncThrowingStream<String, Error> {
         var urlRequest = self.urlRequest
-        urlRequest.httpBody = try jsonBody(text: text, model: model, systemText: systemText, temperature: temperature)
+        urlRequest.httpBody = try jsonBody(text: text,
+                                           imageInput: imageInput,
+                                           model: model,
+                                           systemText: systemText,
+                                           temperature: temperature)
         let (result, response) = try await urlSession.bytes(for: urlRequest)
         try Task.checkCancellation()
         
@@ -221,11 +250,17 @@ public class ChatGPTAPI: @unchecked Sendable {
     }
 
     public func sendMessage(text: String,
+                            imageInput: ImageInput? = nil,
                             model: String = ChatGPTAPI.Constants.defaultModel,
                             systemText: String = ChatGPTAPI.Constants.defaultSystemText,
                             temperature: Double = ChatGPTAPI.Constants.defaultTemperature) async throws -> String {
         var urlRequest = self.urlRequest
-        urlRequest.httpBody = try jsonBody(text: text, model: model, systemText: systemText, temperature: temperature, stream: false)
+        urlRequest.httpBody = try jsonBody(text: text,
+                                           imageInput: imageInput,
+                                           model: model,
+                                           systemText: systemText,
+                                           temperature: temperature,
+                                           stream: false)
         
         let (data, response) = try await urlSession.data(for: urlRequest)
         try Task.checkCancellation()
@@ -256,9 +291,8 @@ public class ChatGPTAPI: @unchecked Sendable {
         self.historyList.removeAll()
     }
     
-    public func replaceHistoryList(with messages: [Message]) {
+    public func replaceHistoryList(with messages: [PlainMessage]) {
         self.historyList = messages
     }
-    
 }
 
