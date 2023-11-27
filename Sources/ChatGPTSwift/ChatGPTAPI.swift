@@ -25,7 +25,7 @@ public class ChatGPTAPI: @unchecked Sendable {
     private let urlString = "https://api.openai.com/v1/chat/completions"
     private let apiKey: String
     private let gptEncoder = GPTEncoder()
-    public private(set) var historyList = [PlainMessage]()
+    public private(set) var historyList = [TextMessage]()
 
     let dateFormatter: DateFormatter = {
         let df = DateFormatter()
@@ -46,16 +46,16 @@ public class ChatGPTAPI: @unchecked Sendable {
         ]
     }
     
-    private func systemMessage(content: String) -> PlainMessage {
-        .init(role: "system", content: content)
+    private func systemMessage(content: String) -> TextMessage {
+        .init(role: "system", text: content)
     }
     
     public init(apiKey: String) {
         self.apiKey = apiKey
     }
     
-    private func generateMessages(from text: String, systemText: String) -> [PlainMessage] {
-        var messages = [systemMessage(content: systemText)] + historyList + [PlainMessage(role: "user", content: text)]
+    private func generateMessages(from text: String, systemText: String) -> [TextMessage] {
+        var messages = [systemMessage(content: systemText)] + historyList + [TextMessage(role: "user", text: text)]
         if gptEncoder.encode(text: messages.content).count > 4096  {
             _ = historyList.removeFirst()
             messages = generateMessages(from: text, systemText: systemText)
@@ -96,8 +96,8 @@ public class ChatGPTAPI: @unchecked Sendable {
     }
     
     private func appendToHistoryList(userText: String, responseText: String) {
-        self.historyList.append(PlainMessage(role: "user", content: userText))
-        self.historyList.append(PlainMessage(role: "assistant", content: responseText))
+        self.historyList.append(TextMessage(role: "user", text: userText))
+        self.historyList.append(TextMessage(role: "assistant", text: responseText))
     }
     
     #if os(Linux)
@@ -291,7 +291,7 @@ public class ChatGPTAPI: @unchecked Sendable {
         self.historyList.removeAll()
     }
     
-    public func replaceHistoryList(with messages: [PlainMessage]) {
+    public func replaceHistoryList(with messages: [TextMessage]) {
         self.historyList = messages
     }
 }

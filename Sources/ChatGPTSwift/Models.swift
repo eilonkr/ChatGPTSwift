@@ -7,12 +7,12 @@
 
 import Foundation
 
-public struct ResponseMessage: Decodable {
+public struct PlainMessage: Codable {
     public let role: String
     public let content: String
 }
 
-public enum MessageContentType: String, Codable {
+public enum MessageContentType: String, Encodable {
     enum CodingKeys: String, CodingKey {
         case text
         case imageURL = "image_url"
@@ -20,6 +20,49 @@ public enum MessageContentType: String, Codable {
     
     case text
     case imageURL
+}
+
+public struct ImageInput: Encodable {
+    public enum Detail: String, Encodable {
+        case auto, low, high
+    }
+    
+    public enum SupportedType: String, Encodable {
+        case png, jpeg
+    }
+    
+    public enum ImageType {
+        case base64Encoded(String, SupportedType)
+        case url(String)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case url
+        case detail
+    }
+    
+    let imageType: ImageType
+    let detail: Detail
+    
+    var url: String {
+        return switch imageType {
+        case .base64Encoded(let string, let supportedType):
+            "data:image/\(supportedType.rawValue);base64,\(string)"
+        case .url(let string):
+            string
+        }
+    }
+    
+    public init(imageType: ImageType, detail: Detail = .auto) {
+        self.imageType = imageType
+        self.detail = detail
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(url, forKey: .url)
+        try container.encode(detail, forKey: .detail)
+    }
 }
 
 public protocol MessageContent: Encodable {
@@ -33,20 +76,6 @@ public struct TextMessageContent: MessageContent {
     init(content: String) {
         self.type = .text
         self.text = content
-    }
-}
-
-public struct ImageInput: Encodable {
-    public enum Detail: String, Encodable {
-        case auto, low, high
-    }
-    
-    let url: String
-    let detail: Detail
-    
-    public init(url: String, detail: Detail = .auto) {
-        self.url = url
-        self.detail = detail
     }
 }
 
@@ -80,24 +109,24 @@ public class Message: Encodable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(role, forKey: .role)
-        try container.encode(getContent(), forKey: .content)
+        try container.encode(AnyEncodable(getContent()), forKey: .content)
     }
     
-    public func getContent() -> AnyCodable {
+    public func getContent() -> [MessageContent] {
         fatalError("Implement in subclass")
     }
 }
 
-public class PlainMessage: Message {
+public class TextMessage: Message {
     let content: [TextMessageContent]
     
-    init(role: String, content: String) {
-        self.content = [TextMessageContent(content: content)]
+    init(role: String, text: String) {
+        content = [TextMessageContent(content: text)]
         super.init(role: role)
     }
     
-    public override func getContent() -> AnyCodable {
-        return AnyCodable(content)
+    public override func getContent() -> [MessageContent] {
+        return content
     }
 }
 
@@ -105,7 +134,7 @@ public class ImageMessage: Message {
     let content: [MessageContent]
     
     init(role: String, text: String, imageInput: ImageInput) {
-        self.content = [
+        content = [
             TextMessageContent(content: text),
             ImageMessageContent(imageInput: imageInput)
         ]
@@ -113,12 +142,12 @@ public class ImageMessage: Message {
         super.init(role: role)
     }
     
-    public override func getContent() -> AnyCodable {
-        return AnyCodable(content)
+    public override func getContent() -> [MessageContent] {
+        return content
     }
 }
 
-extension Array where Element == PlainMessage {
+extension Array where Element == TextMessage {
     var contentCount: Int { map { $0.content }.count }
     var content: String { reduce("") { $0 + ($1.content.first?.text ?? "") } }
 }
@@ -161,7 +190,7 @@ struct Usage: Decodable {
 
 struct Choice: Decodable {
     let finishReason: String?
-    let message: ResponseMessage
+    let message: PlainMessage
 }
 
 struct StreamCompletionResponse: Decodable {
