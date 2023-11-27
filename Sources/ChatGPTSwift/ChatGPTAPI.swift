@@ -79,7 +79,7 @@ public class ChatGPTAPI: @unchecked Sendable {
                           systemText: String,
                           temperature: Double,
                           stream: Bool = true,
-                          maxTokens: Int? = nil) throws -> Data {
+                          maxTokens: Int?) throws -> Data {
         let messages: [Message]
         if let imageInput {
             messages = generateMessages(from: text, imageInput: imageInput, systemText: systemText)
@@ -204,13 +204,15 @@ public class ChatGPTAPI: @unchecked Sendable {
                                   imageInput: ImageInput? = nil,
                                   model: String = ChatGPTAPI.Constants.defaultModel,
                                   systemText: String = ChatGPTAPI.Constants.defaultSystemText,
-                                  temperature: Double = ChatGPTAPI.Constants.defaultTemperature) async throws -> AsyncThrowingStream<String, Error> {
+                                  temperature: Double = ChatGPTAPI.Constants.defaultTemperature,
+                                  maxTokens: Int? = 4096) async throws -> AsyncThrowingStream<String, Error> {
         var urlRequest = self.urlRequest
         urlRequest.httpBody = try jsonBody(text: text,
                                            imageInput: imageInput,
                                            model: model,
                                            systemText: systemText,
-                                           temperature: temperature)
+                                           temperature: temperature,
+                                           maxTokens: maxTokens)
         let (result, response) = try await urlSession.bytes(for: urlRequest)
         try Task.checkCancellation()
         
@@ -253,14 +255,16 @@ public class ChatGPTAPI: @unchecked Sendable {
                             imageInput: ImageInput? = nil,
                             model: String = ChatGPTAPI.Constants.defaultModel,
                             systemText: String = ChatGPTAPI.Constants.defaultSystemText,
-                            temperature: Double = ChatGPTAPI.Constants.defaultTemperature) async throws -> String {
+                            temperature: Double = ChatGPTAPI.Constants.defaultTemperature,
+                            maxTokens: Int? = 4096) async throws -> String {
         var urlRequest = self.urlRequest
         urlRequest.httpBody = try jsonBody(text: text,
                                            imageInput: imageInput,
                                            model: model,
                                            systemText: systemText,
                                            temperature: temperature,
-                                           stream: false)
+                                           stream: false,
+                                           maxTokens: maxTokens)
         
         let (data, response) = try await urlSession.data(for: urlRequest)
         try Task.checkCancellation()
