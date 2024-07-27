@@ -13,13 +13,8 @@ public struct PlainMessage: Codable {
 }
 
 public enum MessageContentType: String, Encodable {
-    enum CodingKeys: String, CodingKey {
-        case text
-        case imageURL = "image_url"
-    }
-    
     case text
-    case imageURL
+    case imageURL = "image_url"
 }
 
 public struct ImageInput: Encodable {
